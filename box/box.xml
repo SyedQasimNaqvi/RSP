@@ -1,0 +1,12 @@
+<mujoco>
+    <option gravity="0 0 -9.81" />
+    <worldbody>
+        <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
+        <geom type="plane" size="1 1 0.1" rgba=".9 .9 .9 1" friction="0 0 0"/>
+        <geom type="plane" size=".01 .01 0.1" pos=".25 .25 0" rgba=".9 0 0 1" friction="0 0 0"/>
+        <body pos="0 0 0">
+            <joint type="free"/>
+            <geom type="box" size=".1 .1 .1" rgba=".9 0 0 1" friction="0 0 0"/>
+        </body>
+    </worldbody>
+</mujoco>

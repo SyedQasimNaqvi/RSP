@@ -1,0 +1,42 @@
+<mujoco>
+    <option gravity="0 0 -9.81"/>
+    <worldbody>
+        <light diffuse=".5 .5 .5" pos="0 0 15" dir="0 0 -1"/>
+        <geom type="plane" size="10 10 0.1" rgba="1 1 1 1"/>
+        <geom type="plane" size=".05 .05 0.1" rgba="1 0 0 1" pos="0 1 0"/>
+
+        <body pos="0 0 1">
+            <joint type="free"/>
+            <geom name="chassis" type="box" size=".15 .3 .05" rgba=".9 .9 0 0.5"/>
+            
+            <body name="left_wheel" pos="0.19 .2 0">
+                <joint name="left_wheel_joint" type="hinge" axis="1 0 0" limited="false"/>
+                <geom name="left_wheel_geom" type="cylinder" size="0.15 0.025" rgba="0 .9 0 1" mass="0.2" friction="1 0.005 0.0001" euler="0 90 0"/>
+            </body>
+
+            <body name="right_wheel" pos="-0.19 .2 0">
+                <joint name="right_wheel_joint" type="hinge" axis="1 0 0" limited="false"/>
+                <geom name="right_wheel_geom" type="cylinder" size="0.15 0.025" rgba="0 .9 0 1" mass="0.2" friction="1 0.005 0.0001" euler="0 90 0"/>
+            </body>
+
+            <body name="rear_wheel_mount" pos="0 -0.5 0">
+                <!-- steering hinge -->
+                <joint name="steering_joint" type="hinge" axis="0 0 1" limited="false" damping=".01"/>
+                <geom type="sphere" size="0.001" rgba="0 0 0 0"/>
+
+                <body name="rear_wheel" pos="0 0 0">
+                    <!-- rolling hinge -->
+                    <joint name="rear_wheel_roll" type="hinge" axis="1 0 0" limited="false" damping=".01"/>
+                    <geom name="rear_wheel_geom" type="cylinder" size="0.1 0.025" 
+                        rgba="0 .9 .9 1" mass="0.2" friction="1 0.005 0.0001" euler="0 90 0"/>
+                </body>
+            </body>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <velocity name="left_wheel_vel" joint="left_wheel_joint" kv="1"/>
+        <velocity name="right_wheel_vel" joint="right_wheel_joint" kv="1"/>
+        <position name="turn_wheel_vel" joint="steering_joint" kp="1"/>
+    </actuator>
+</mujoco>

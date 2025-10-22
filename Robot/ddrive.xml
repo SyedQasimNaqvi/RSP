@@ -1,0 +1,72 @@
+<mujoco model="diff_drive">
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="RK4"/>
+  <compiler angle="radian" inertiafromgeom="true"/>
+
+  <default>
+    <joint damping="0.05" limited="false" armature="0.002"/>
+    <geom solimp="0.9 0.95 0.001" solref="0.005 1" condim="3" density="700"/>
+    <motor ctrllimited="true" ctrlrange="-2 2"/>
+  </default>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.9 0.9 0.9" rgb2="0.7 0.7 0.7"/>
+    <material name="ground_mat" texture="grid" texrepeat="12 12" reflectance="0.2"/>
+  </asset>
+
+  <worldbody>
+    <geom name="ground" type="plane" size="20 20 0.1" material="ground_mat"
+          friction="20.0 0.0 0.0" contype="1" conaffinity="1"/>
+
+    <geom name="target" type="plane" pos="1 0 0.001" size="0.05 0.05 0.001" rgba="0 1 0 0.5"
+          friction="0.00 0.00 0.00" contype="0" conaffinity="0"/>
+
+    <!-- Base height so wheels touch ground; chassis clears it -->
+    <body name="base" pos="0 0 0.079">
+  <joint name="x"   type="slide" axis="1 0 0"/>
+  <joint name="y"   type="slide" axis="0 1 0"/>
+  <joint name="yaw" type="hinge" axis="0 0 1"/>
+  
+      <!-- Shift chassis slightly forward to bias COM ahead of axle -->
+      <geom name="chassis" type="box" pos="0.14 0 0" size="0.20 0.15 0.05"
+            rgba="0.2 0.4 0.8 1" friction="0.8 0.01 0.001" contype="1" conaffinity="1"/>
+
+      <!-- Wheels: axle = +Y, radius=0.06 -->
+      <body name="left_wheel" pos="0 0.18 0.0">
+        <joint name="left_hinge" type="hinge" axis="0 1 0" damping="0.1" frictionloss="0.1"/>
+        <geom name="left_wheel_geom" type="cylinder"
+              fromto="0 -0.01 0  0 0.01 0" size="0.08"
+              rgba="0.1 0.1 0.1 1" friction="1.0 0.0 0.0" contype="1" conaffinity="1"/>
+        <geom name="left_marker" type="sphere" size="0.01" pos="0 0.01 0.05"
+              rgba="0.9 0.0 0.0 1"
+              friction="0.00 0.00 0.00" contype="0" conaffinity="0"/>    
+      </body>
+
+      <body name="right_wheel" pos="0 -0.18 0.0">
+        <joint name="right_hinge" type="hinge" axis="0 1 0" damping="0.1" frictionloss="0.1"/>
+        <geom name="right_wheel_geom" type="cylinder"
+              fromto="0 -0.01 0  0 0.01 0" size="0.08"
+              rgba="0.1 0.1 0.1 1" friction="1.0 0.0 0.0" contype="1" conaffinity="1"/>
+        <geom name="right_marker" type="sphere" size="0.01" pos="0 -0.01 0.05"
+              rgba="0.9 0.0 0.0 1"
+              friction="0.00 0.00 0.00" contype="0" conaffinity="0"/>                
+      </body>
+
+      <!-- Passive rear caster: tiny ball just touching ground -->
+      <body name="caster" pos="0.36 0 -0.05">
+        <!-- No joint -> rigidly attached to base -->
+        <geom name="caster_ball" type="sphere" size="0.03"
+              rgba="0.3 0.3 0.3 1"
+              friction="0.00 0.00 0.00" contype="1" conaffinity="1"/>
+      </body>
+
+      <site name="base_com" pos="0 0 0" size="0.01" rgba="1 0 0 1"/>
+      <site name="forward_dir" pos="0.25 0 0.05" size="0.01" rgba="0 1 0 1"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <velocity name="left_vel"  joint="left_hinge"  kv="5" ctrlrange="-30 30"/>
+    <velocity name="right_vel" joint="right_hinge" kv="5" ctrlrange="-30 30"/>
+  </actuator>
+</mujoco>
