@@ -237,9 +237,8 @@ class PPOBuffer:
 # 3) Training Loop
 # -------------------------
 def train_ppo(xml_path,
-              steps_per_episode=500,
-              episodes_per_epoch=500,
-              epochs=10,
+              steps_per_epoch=4000,
+              epochs=50,
               gamma=0.99,
               lam=0.95,
               clip_ratio=0.2,
@@ -247,9 +246,9 @@ def train_ppo(xml_path,
               vf_lr=1e-3,
               train_iters=80,
               target_kl=0.01,
-              max_ep_len=500,
+              max_ep_len=300,
               seed=1,
-              render=True):
+              render=False):
     env = BoxXYEnv(xml_path, max_steps=max_ep_len, seed=seed)
 
     torch.manual_seed(seed)
@@ -261,7 +260,7 @@ def train_ppo(xml_path,
     ac = ActorCritic(obs_dim, act_dim)
     pi_optimizer = optim.Adam(list(ac.pi.parameters()) + [ac.log_std], lr=pi_lr)
     vf_optimizer = optim.Adam(ac.v.parameters(), lr=vf_lr)
-    buf = PPOBuffer(obs_dim, act_dim, episodes_per_epoch, gamma, lam)
+    buf = PPOBuffer(obs_dim, act_dim, steps_per_epoch, gamma, lam)
 
     # For optional rendering
     viewer_handle = viewer.launch_passive(env.model, env.data) if render else None
@@ -275,7 +274,7 @@ def train_ppo(xml_path,
         obs = env.reset()
         ep_ret, ep_len = 0.0, 0
 
-        for t in range(epoch):
+        for t in range(steps_per_epoch):
             obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
             with torch.no_grad():
                 act_t, logp_t, v_t = ac.step(obs_t)
@@ -292,7 +291,7 @@ def train_ppo(xml_path,
 
             timeout = (ep_len == max_ep_len)
             terminal = done
-            epoch_ended = (t == epochs - 1)
+            epoch_ended = (t == steps_per_epoch - 1)
 
             if terminal or epoch_ended:
                 last_val = 0.0 if done else compute_v(obs)
@@ -338,7 +337,7 @@ def train_ppo(xml_path,
                 break
 
         # Reinit buffer for next epoch
-        buf = PPOBuffer(obs_dim, act_dim, epoch, gamma, lam)
+        buf = PPOBuffer(obs_dim, act_dim, steps_per_epoch, gamma, lam)
 
     print("Training finished.")
 
@@ -356,4 +355,4 @@ if __name__ == "__main__":
     # xml_path = "/mnt/data/box (1).xml"
     # Otherwise, replace with the local path to the same xml content.
     xml_path = "box.xml"  # change this if needed
-    train_ppo(xml_path, epochs=16, episodes_per_epoch=500)
+    train_ppo(xml_path, epochs=16, steps_per_epoch=4000)
