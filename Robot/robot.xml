@@ -3,7 +3,7 @@
     <worldbody>
         <light diffuse=".5 .5 .5" pos="0 0 15" dir="0 0 -1"/>
         <geom type="plane" size="10 10 0.1" rgba="1 1 1 1"/>
-        <geom type="plane" size=".05 .05 0.1" rgba="1 0 0 1" pos="0 1 0"/>
+        <geom type="plane" size=".05 .05 0.1" rgba="1 0 0 1" pos=".25 .25 0"/>
 
         <body pos="0 0 1">
             <joint type="free"/>

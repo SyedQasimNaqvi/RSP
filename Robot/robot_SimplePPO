@@ -20,110 +20,78 @@ from mujoco import viewer
 # -------------------------
 # 1) Simple MuJoCo Env
 # -------------------------
-class BoxXYEnv:
+class RobotEnv:
     """
-    Observations:
-      [x, y, vx, vy, gx_minus_x, gy_minus_y]
-    Actions:
-      2D force [fx, fy] applied to the body in world frame (z-force is zero)
-    Reward:
-      -distance_to_goal  with small control penalty
-    Episode ends on success, fall, or time limit.
+    A small MuJoCo environment for the wheeled robot in robot.xml.
+
+    Actions: [left_wheel_vel, right_wheel_vel, steer_angle]
+    Observation: [x, y, vx, vy, gx - x, gy - y]
+    Reward: -distance_to_goal (penalize control effort optionally)
     """
-    def __init__(self, xml_path, max_steps=300, goal_radius=0.03, force_limit=5.0, frame_skip=5, seed=0):
+    def __init__(self, xml_path, goal=np.array([0, 0.25]), max_steps=300, frame_skip=5, seed=0):
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
-        self.body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, self.model.body(1).name)  # the only moving body
-        # Note: body(0) is "world", body(1) is the free box created in the xml
         self.rng = np.random.default_rng(seed)
-
+        self.goal = np.array(goal, dtype=np.float64)
         self.max_steps = max_steps
-        self.goal_radius = goal_radius
-        self.force_limit = force_limit
         self.frame_skip = frame_skip
-
-        self.goal = np.zeros(2, dtype=np.float64)
         self.step_count = 0
 
-        # Convenience
-        self.dt = self.model.opt.timestep
+        # Actuator indices
+        self.act_left = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_wheel_vel")
+        self.act_right = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_wheel_vel")
+        self.act_turn = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "turn_wheel_vel")
 
-    def _zero_forces(self):
-        # Clear external forces after stepping
-        self.data.xfrc_applied[self.body_id, :] = 0.0
+        # For observations, get body id of chassis (main body)
+        self.body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "chassis")
 
-    def _set_xy_force(self, fx, fy):
-        # Apply force in world coordinates at the body's CoM: [fx, fy, fz, tx, ty, tz]
-        # self.data.xfrc_applied[self.body_id, 0] = fx
-        # self.data.xfrc_applied[self.body_id, 1] = fy
-        # self.data.xfrc_applied[self.body_id, 2] = 0.0
-
-        self.data.qvel[0] = fx
-        self.data.qvel[1] = fy
-        # self.data.qvel[2] = 0.0
-
-    def _get_xy_pos_vel(self):
-        # qpos for a free joint is [qx, qy, qz, qw, x, y, z]? In MuJoCo it is [x, y, z, qw, qx, qy, qz].
-        # The exact layout can be read via mj_state. For python bindings:
-        # For free joint, qpos[0:3]=pos(x,y,z), qpos[3:7]=quat(w,x,y,z), qvel[0:3]=lin vel, qvel[3:6]=ang vel.
-        x, y, z = self.data.qpos[0:3]
-        vx, vy = self.data.qvel[0:2]
-        return x, y, z, vx, vy
+        self.obs_dim = 6
+        self.act_dim = 3
 
     def reset(self):
         mujoco.mj_resetData(self.model, self.data)
-
-        # Start the box near origin, slightly above ground to avoid penetration
-        # Position
-        self.data.qpos[0:3] = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-        # Identity orientation quaternion (w, x, y, z)
-        self.data.qpos[3:7] = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
-        # Zero linear and angular velocities
+        self.data.qpos[:] = 0.0
         self.data.qvel[:] = 0.0
-
         mujoco.mj_forward(self.model, self.data)
 
-        # Sample a goal on the plane near the origin
-        # self.goal = self.rng.uniform(low=-0.3, high=0.3, size=2)
-        self.goal = np.array([.25, .25])
         self.step_count = 0
-        self._zero_forces()
         return self._get_obs()
 
+    def _get_chassis_xy_vel(self):
+        x, y, z = self.data.xpos[self.body_id]
+        vx, vy, vz = self.data.cvel[self.body_id][:3]  # linear velocity
+        return x, y, vx, vy
+
     def _get_obs(self):
-        x, y, z, vx, vy = self._get_xy_pos_vel()
+        x, y, vx, vy = self._get_chassis_xy_vel()
         gx, gy = self.goal
         obs = np.array([x, y, vx, vy, gx - x, gy - y], dtype=np.float32)
         return obs
 
     def step(self, action):
         self.step_count += 1
-        fx, fy = np.clip(action, -self.force_limit, self.force_limit)
 
-        # Apply forces and step simulator
-        self._set_xy_force(float(fx), float(fy))
+        # Clip actions to safe range
+        left_vel, right_vel, steer_angle = np.clip(action, [-10, -10, -0.5], [10, 10, 0.5])
+
+        # Apply control
+        self.data.ctrl[self.act_left] = left_vel
+        self.data.ctrl[self.act_right] = right_vel
+        self.data.ctrl[self.act_turn] = steer_angle
+
         for _ in range(self.frame_skip):
             mujoco.mj_step(self.model, self.data)
-        self._zero_forces()
 
-        # Compute reward and done
         obs = self._get_obs()
-        x, y, z, vx, vy = self._get_xy_pos_vel()
-        dist = np.linalg.norm(self.goal - np.array([x, y]))
-        # reward = -dist - 0.001 * (fx * fx + fy * fy)
-        reward = -(np.linalg.norm(obs[:2] - self.goal))
-        # if np.linalg.norm(obs[:2] - self.goal) < 0.05:
-        #     reward += 10.0
+        x, y, vx, vy = self._get_chassis_xy_vel()
 
-        # Success, fall, or time limit
-        success = dist < self.goal_radius
-        # fell = z < 0.2  # if it face-plants or falls off something
-        fell = False
-        timeout = self.step_count >= self.max_steps
-        done = success or fell or timeout
+        dist = np.linalg.norm(np.array([x, y]) - self.goal)
+        reward = -dist  # + optional control penalty
 
-        info = {"success": success, "fell": fell, "timeout": timeout, "dist": dist}
-        return self._get_obs(), float(reward), bool(done), info
+        done = (dist < 0.05) or (self.step_count >= self.max_steps)
+        info = {"dist": dist, "success": dist < 0.05}
+
+        return obs, reward, done, info
 
 
 # -------------------------
@@ -246,16 +214,16 @@ def train_ppo(xml_path,
               vf_lr=1e-3,
               train_iters=80,
               target_kl=0.01,
-              max_ep_len=300,
+              max_ep_len=1000,
               seed=1,
               render=True):
-    env = BoxXYEnv(xml_path, max_steps=max_ep_len, seed=seed)
+    env = RobotEnv(xml_path, max_steps=max_ep_len, seed=seed)
 
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    obs_dim = 6
-    act_dim = 2
+    obs_dim = env.obs_dim
+    act_dim = env.act_dim
 
     ac = ActorCritic(obs_dim, act_dim)
     pi_optimizer = optim.Adam(list(ac.pi.parameters()) + [ac.log_std], lr=pi_lr)
@@ -354,5 +322,5 @@ if __name__ == "__main__":
     # Point this to your xml. If you are running inside the same environment where you uploaded the file:
     # xml_path = "/mnt/data/box (1).xml"
     # Otherwise, replace with the local path to the same xml content.
-    xml_path = "box.xml"  # change this if needed
-    train_ppo(xml_path, epochs=50, steps_per_epoch=4000)
+    xml_path = "ddrive.xml"  # change this if needed
+    train_ppo(xml_path, epochs=50, steps_per_epoch=13000)
