@@ -19,6 +19,7 @@ class RobotEnv:
         self.max_steps = max_steps
         self.frame_skip = frame_skip
         self.step_count = 0
+        self.prev_dist = None
 
         # Use correct actuator names
         self.act_left = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_vel")
@@ -36,12 +37,23 @@ class RobotEnv:
         self.data.qvel[:] = 0.0
         mujoco.mj_forward(self.model, self.data)
         self.step_count = 0
+        x, y, _, _ = self._get_chassis_xy_vel()
+        self.prev_dist = float(np.linalg.norm(np.array([x, y]) - self.goal))  #records distance from goal
         return self._get_obs()
 
     def _get_chassis_xy_vel(self):
-        x, y, z = self.data.xpos[self.body_id]
-        vx, vy, vz = self.data.cvel[self.body_id][:3]
-        return x, y, vx, vy
+        # World-frame linear & angular velocity of the body
+        vel6 = np.zeros(6, dtype=np.float64)
+        mujoco.mj_objectVelocity(
+            self.model, self.data,
+            mujoco.mjtObj.mjOBJ_BODY, self.body_id,
+            vel6, 0  # flg_local=0 → world frame
+        )
+        # vel6[0:3] = linear (vx, vy, vz) in world frame
+        # vel6[3:6] = angular (wx, wy, wz) in world frame
+        x, y, _ = self.data.xpos[self.body_id]
+        vx, vy = float(vel6[0]), float(vel6[1])
+        return float(x), float(y), vx, vy
 
     def _get_obs(self):
         x, y, vx, vy = self._get_chassis_xy_vel()
@@ -63,10 +75,14 @@ class RobotEnv:
         x, y, vx, vy = self._get_chassis_xy_vel()
 
         dist = np.linalg.norm(np.array([x, y]) - self.goal)
-        reward = -dist
+        progress = self.prev_dist - dist           # positive when we get closer
+        reward = 3.0 * progress                    # scale factor; tweak 2–5 if needed
+        self.prev_dist = dist
 
         done = (dist < 0.05) or (self.step_count >= self.max_steps)
         info = {"dist": dist, "success": dist < 0.05}
+        if dist < 0.05:
+            reward += 100.0     # small terminal bonus
         return obs, reward, done, info
 
 
